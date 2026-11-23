@@ -1,4 +1,4 @@
-import { VoiceOptions } from "./VoiceOptions";
+import { VoicePicker } from "./VoicePicker";
 import { useState } from "react";
 export function TestDialogue({
   voices,
@@ -25,13 +25,13 @@ export function TestDialogue({
           onChange={(e) => setSpeaker(e.target.value)}
         />
       </label>
-      <label>
-        Voice
-        <select value={voice} onChange={(e) => setVoice(e.target.value)}>
-          <option value="">Use character assignment</option>
-          <VoiceOptions voices={voices} />
-        </select>
-      </label>
+      <VoicePicker
+        label="Voice"
+        voices={voices}
+        value={voice}
+        onChange={setVoice}
+        automatic="Use character assignment"
+      />
       <label>
         Dialogue
         <textarea

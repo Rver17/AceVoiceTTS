@@ -51,6 +51,8 @@ export function allocate(
   const { existing, preset, display } = identity;
   if (existing && voices.includes(existing.voiceId)) return existing;
   const key = keyOf(display);
+  // Imported recordings are assigned explicitly by their owner.
+  voices = voices.filter((v) => !v.startsWith("ref_"));
   const unused = voices.filter((v) => !cast.some((p) => p.voiceId === v));
   const unreserved = unused.filter((v) => !casting.some((c) => c.voice === v));
   const eligible = unreserved.length

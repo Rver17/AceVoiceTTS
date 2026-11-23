@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { dictionary } from "./dictionary";
+export const referenceModel = "sherpa-onnx-pocket-tts-int8-2026-01-26";
 
 export const modelId = "kokoro-82m-onnx-v1.0";
 export const clean = (s: string) =>
@@ -7,7 +9,9 @@ export const textSchema = z
   .string()
   .transform(clean)
   .pipe(z.string().min(1).max(1500));
-export const voice = z.string().regex(/^[ab][mf]_[a-z0-9_]+$/);
+export const voice = z
+  .string()
+  .regex(/^(?:[ab][mf]_[a-z0-9_]+|ref_[a-z0-9-]{1,32}_[0-9a-f]{24})$/);
 export const volume = z.number().min(0).max(1);
 export const speed = z.number().min(0.5).max(2);
 export const rect = z
@@ -28,6 +32,8 @@ export const profile = z.object({
 export type Profile = z.infer<typeof profile>;
 export const config = z.object({
   version: z.literal(1),
+  pronunciations: dictionary.default([]),
+  personalNames: z.record(z.string(), name.max(32)).default({}),
   cast: z.array(profile),
   calibration: z.record(z.string(), regions),
   auto: z.boolean(),
@@ -42,6 +48,8 @@ export const config = z.object({
 export type Config = z.infer<typeof config>;
 export const defaults: Config = {
   version: 1,
+  pronunciations: [],
+  personalNames: {},
   cast: [],
   calibration: {},
   auto: true,

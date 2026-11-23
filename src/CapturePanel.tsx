@@ -38,6 +38,21 @@ export function CapturePanel(props: Props) {
     busy = useRef(false),
     latest = useRef(props);
   latest.current = props;
+  useEffect(
+    () =>
+      api.onHotkey((action) => {
+        if (action !== "pause") return;
+        if (mode === "Listening") {
+          halt();
+          setMode("Paused");
+        } else if (mode === "Paused" && key && props.ready)
+          props
+            .arm()
+            .then(() => setMode("Listening"))
+            .catch(fail);
+      }),
+    [mode, key, props.ready],
+  );
   const stabilizer = useRef(new Stabilizer()),
     recognizer = useRef(new Recognition());
   function halt() {

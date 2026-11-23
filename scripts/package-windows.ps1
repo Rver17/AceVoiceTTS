@@ -22,8 +22,8 @@ try {
     $service = "$appDir/services/tts"
     New-Item -Type Directory -Force $service | Out-Null
     Copy-Item dist,dist-shell,package.json,package-lock.json $appDir -Recurse
-    Copy-Item services/tts/app.py,services/tts/server.py $service
-    Copy-Item README.md,docs $appDir -Recurse
+    Copy-Item services/tts/app.py,services/tts/server.py,services/tts/personal.py $service
+    Copy-Item README.md,docs,public $appDir -Recurse
     Push-Location $appDir
     try {
         npm.cmd ci --omit=dev --ignore-scripts
@@ -42,5 +42,6 @@ try {
     Rename-Item -LiteralPath $stage -NewName $folder
     Write-Host "Portable app: $output/AceVoice.exe"
 } finally { Pop-Location }
+
 
 

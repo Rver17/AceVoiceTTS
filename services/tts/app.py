@@ -6,6 +6,7 @@ import os
 import secrets
 import threading
 import urllib.request
+import personal
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -101,14 +102,29 @@ def health():
 
 @app.get("/v1/voices")
 def list_voices():
-    return [dict(id=v, language=language(v)) for v in voices]
+    return [dict(id=v, language=language(v)) for v in voices + personal.listed()]
+
+
+class Reference(BaseModel):
+    name: str = Field(min_length=1, max_length=32)
+    wav: str = Field(min_length=1, max_length=2000000)
+
+
+@app.post("/v1/reference")
+def import_reference(data: Reference):
+    try:
+        return {"id": personal.add(data.name, data.wav, directory)}
+    except Exception as exc:
+        raise HTTPException(422, f"Voice import failed: {exc}") from exc
 
 
 @app.post("/v1/synthesize")
 def synthesize(data: Synthesis):
     if state["status"] != "ready":
         raise HTTPException(503, state["message"])
-    if data.voiceId not in voices or data.modelId != MODEL:
+    custom = data.voiceId in personal.listed()
+    expected_model = personal.PACK if custom else MODEL
+    if (not custom and data.voiceId not in voices) or data.modelId != expected_model:
         raise HTTPException(422, "Unknown voice or model")
     if not inference.acquire(blocking=False):
         raise HTTPException(429, "Synthesis busy")
@@ -118,7 +134,10 @@ def synthesize(data: Synthesis):
         if "_mix_" in style:
             first, second = style.split("_mix_")
             style = (engine.get_voice_style(first) + engine.get_voice_style(second)) * 0.5
-        samples, rate = engine.create(data.text, voice=style, speed=data.speed, lang=language(data.voiceId))
+        if custom:
+            samples, rate = personal.generate(data.voiceId, data.text, data.speed, directory)
+        else:
+            samples, rate = engine.create(data.text, voice=style, speed=data.speed, lang=language(data.voiceId))
         if not samples.size:
             raise ValueError("No pronounceable audio")
         output = io.BytesIO()

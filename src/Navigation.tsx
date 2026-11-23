@@ -15,12 +15,10 @@ export function Navigation({
     <>
       <header className="masthead">
         <div className="brand">
-          <span className="crest" aria-hidden="true">
-            A
-          </span>
+          <img className="court-badge" alt="" src="./acevoice.svg" />
           <div>
             <h1>AceVoice</h1>
-            <p>Ace Attorney Trilogy · Developed by {author}</p>
+            <p>Phoenix Wright: Ace Attorney Trilogy · Developed by {author}</p>
           </div>
         </div>
         <button

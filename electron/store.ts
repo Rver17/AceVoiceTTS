@@ -6,6 +6,7 @@ import {
   config,
   defaults,
   modelId,
+  referenceModel,
   type Config,
   type Speech,
 } from "../core/contracts";
@@ -19,7 +20,10 @@ export function writeConfig(dir: string, data: Config) {
   fs.writeFileSync(file + ".tmp", JSON.stringify(config.parse(data), null, 2));
   fs.renameSync(file + ".tmp", file);
 }
-export function cacheKey(s: Speech, model: string = modelId) {
+export function cacheKey(
+  s: Speech,
+  model: string = s.voiceId.startsWith("ref_") ? referenceModel : modelId,
+) {
   return createHash("sha256")
     .update(
       JSON.stringify([

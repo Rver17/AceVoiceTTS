@@ -2,7 +2,7 @@ import { useState } from "react";
 import { casting } from "../core/cast";
 import { allocate } from "../core/dialogue";
 import { api } from "./api";
-import { VoiceOptions } from "./VoiceOptions";
+import { VoicePicker } from "./VoicePicker";
 import type { Config, Profile } from "../core/contracts";
 
 type Props = {
@@ -55,15 +55,12 @@ function CharacterEditor({
             .catch(fail);
         }}
       >
-        <label>
-          Assigned voice
-          <select
-            value={draft.voiceId}
-            onChange={(e) => setDraft({ ...draft, voiceId: e.target.value })}
-          >
-            <VoiceOptions voices={voices} />
-          </select>
-        </label>
+        <VoicePicker
+          label="Assigned voice"
+          voices={voices}
+          value={draft.voiceId}
+          onChange={(voiceId) => setDraft({ ...draft, voiceId })}
+        />
         <div className="row">
           <label>
             Speaking speed · {draft.speed.toFixed(2)}×
@@ -180,9 +177,13 @@ export function Voices(props: Props) {
           />
         )}
         <small>
-          {voices.filter((v) => !v.includes("_mix_")).length} stock voices ·{" "}
-          {voices.filter((v) => v.includes("_mix_")).length} two-voice blends.
-          New named characters receive an unused voice while one is available.
+          {
+            voices.filter((v) => !v.startsWith("ref_") && !v.includes("_mix_"))
+              .length
+          }{" "}
+          stock voices · {voices.filter((v) => v.includes("_mix_")).length}{" "}
+          two-voice blends. New named characters receive an unused voice while
+          one is available.
         </small>
       </div>
     </div>

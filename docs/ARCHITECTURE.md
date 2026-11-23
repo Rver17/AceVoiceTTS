@@ -11,3 +11,5 @@ The developer and portable distributions use the same application entry point. T
 Primary references: [Kokoro ONNX](https://github.com/thewh1teagle/kokoro-onnx), [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), [Electron capture](https://www.electronjs.org/docs/latest/api/desktop-capturer), [Tesseract.js](https://github.com/naptha/tesseract.js).
 
 
+
+Personal voices use the English Pocket TTS model through sherpa-onnx. The renderer decodes a selected file or microphone clip to mono 24 kHz PCM. The loopback service validates duration and signal, then stores the clip under the current app profile. Reference IDs include a content digest. Personal synthesis and Kokoro have separate model identities in the WAV cache. The first import installs the pinned, checksum-verified model. Retain its license and model notes alongside the downloaded files. [Kyutai Pocket TTS](https://github.com/kyutai-labs/pocket-tts) · [sherpa-onnx integration](https://k2-fsa.github.io/sherpa/onnx/tts/pocket.html).

@@ -4,3 +4,4 @@ uvicorn==0.34.2
 soundfile==0.13.1
 pytest==8.3.5
 httpx==0.28.1
+sherpa-onnx==2.0.3

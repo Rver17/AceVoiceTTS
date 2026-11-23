@@ -4,7 +4,12 @@ import {
   ipcMain,
   session,
   desktopCapturer,
+  globalShortcut,
+  dialog,
 } from "electron";
+import fs from "node:fs/promises";
+import { exportCast, mergeCast, preset } from "../core/presets";
+import { pronounce } from "../core/dictionary";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
@@ -23,6 +28,7 @@ import {
   status,
   installed,
   synthesize,
+  importReference,
 } from "./engine";
 import { AudioCache, readConfig, writeConfig } from "./store";
 import { recognize, closeOCR } from "./ocr";
@@ -36,6 +42,7 @@ else
     const win = new BrowserWindow({
       width: 1150,
       height: 850,
+      icon: path.join(root, "dist/acevoice.ico"),
       backgroundColor: "#101820",
       autoHideMenuBar: true,
       webPreferences: {
@@ -69,12 +76,17 @@ else
         cb({});
       }
     });
-    session.defaultSession.setPermissionRequestHandler((wc, permission, cb) =>
-      cb(
-        wc === win.webContents &&
-          trusted(wc.getURL()) &&
-          permission === "display-capture",
-      ),
+    session.defaultSession.setPermissionRequestHandler(
+      (wc, permission, cb, details) =>
+        cb(
+          wc === win.webContents &&
+            trusted(wc.getURL()) &&
+            (permission === "display-capture" ||
+              (permission === "media" &&
+                "mediaTypes" in details &&
+                details.mediaTypes?.length === 1 &&
+                details.mediaTypes[0] === "audio")),
+        ),
     );
     const cache = new AudioCache(path.join(dir, "audio"));
     function handle<T>(
@@ -90,7 +102,54 @@ else
     }
     const empty = z.undefined();
     handle("status", empty, status);
-    handle("retry", empty, () => startEngine(root));
+    handle("retry", empty, () => startEngine(root, dir));
+    handle(
+      "importVoice",
+      z.object({
+        name: name.max(32),
+        bytes: z.instanceof(Uint8Array).refine((b) => b.length <= 1440044),
+      }),
+      async (p) => {
+        const id = await importReference(p.name, p.bytes);
+        const data = readConfig(dir);
+        data.personalNames[id] = p.name;
+        writeConfig(dir, data);
+        return id;
+      },
+    );
+    handle("exportPreset", empty, async () => {
+      const dest = await dialog.showSaveDialog(win, {
+        defaultPath: "AceVoice cast.json",
+        filters: [{ name: "Cast preset", extensions: ["json"] }],
+      });
+      if (dest.canceled || !dest.filePath) return false;
+      await fs.writeFile(
+        dest.filePath,
+        JSON.stringify(exportCast(readConfig(dir)), null, 2),
+      );
+      return true;
+    });
+    handle("importPreset", preset, async (input) => {
+      const list = await installed();
+      const data = mergeCast(readConfig(dir), input, list);
+      writeConfig(dir, data);
+      return data;
+    });
+    const missing: string[] = [];
+    for (const [action, key] of Object.entries({
+      pause: "P",
+      mute: "M",
+      replay: "R",
+    })) {
+      const shortcut = "Control+Alt+" + key;
+      if (
+        !globalShortcut.register(shortcut, () => {
+          if (!win.isDestroyed()) win.webContents.send("hotkey", action);
+        })
+      )
+        missing.push(shortcut);
+    }
+    handle("shortcutConflicts", empty, () => missing);
     handle("voices", empty, installed);
     handle("settings", empty, () => readConfig(dir));
     handle(
@@ -153,7 +212,15 @@ else
         return data;
       },
     );
-    handle("audio", speech, (s) => cache.audio(s, synthesize));
+    handle("audio", speech, (s) =>
+      cache.audio(
+        speech.parse({
+          ...s,
+          text: pronounce(s.text, readConfig(dir).pronunciations),
+        }),
+        synthesize,
+      ),
+    );
     handle("cache", empty, async () =>
       (await cache.entries()).reduce((n, e) => n + e.size, 0),
     );
@@ -190,11 +257,12 @@ else
         }
       },
     );
-    startEngine(root);
+    startEngine(root, dir);
     await win.loadURL(page);
   });
 app.on("window-all-closed", () => app.quit());
 app.on("before-quit", () => {
+  globalShortcut.unregisterAll();
   stopEngine();
   closeOCR();
 });

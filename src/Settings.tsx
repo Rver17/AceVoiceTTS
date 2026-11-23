@@ -1,4 +1,4 @@
-import { VoiceOptions } from "./VoiceOptions";
+import { VoicePicker } from "./VoicePicker";
 import { useState } from "react";
 import { api } from "./api";
 import type { Config } from "../core/contracts";
@@ -27,16 +27,13 @@ export function Settings({
         />{" "}
         Auto-assign character voices
       </label>
-      <label>
-        Default voice
-        <select
-          value={data.defaultVoice ?? ""}
-          onChange={(e) => patch({ defaultVoice: e.target.value || null })}
-        >
-          <option value="">First available</option>
-          <VoiceOptions voices={voices} />
-        </select>
-      </label>
+      <VoicePicker
+        label="Default voice"
+        voices={voices}
+        value={data.defaultVoice ?? ""}
+        onChange={(v) => patch({ defaultVoice: v || null })}
+        automatic="First available"
+      />
       <label>
         On new dialogue
         <select

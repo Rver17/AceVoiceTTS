@@ -11,6 +11,9 @@ import { api } from "./api";
 import { CapturePanel } from "./CapturePanel";
 import { Settings } from "./Settings";
 import { Voices } from "./Voices";
+import { PersonalVoices } from "./PersonalVoices";
+import { PersonalVoiceNames } from "./VoicePicker";
+import { VoiceSettings } from "./VoiceSettings";
 import { Navigation, type Screen } from "./Navigation";
 import { TestDialogue } from "./TestDialogue";
 import "./court.css";
@@ -115,6 +118,24 @@ export function App() {
       .catch(fail);
   }
   const ready = health.status === "ready";
+  useEffect(
+    () =>
+      api.onHotkey((action) => {
+        if (action === "mute") {
+          player.mute(!muted);
+          setMuted(!muted);
+        }
+        const h = history[0];
+        if (action === "replay" && h)
+          void player
+            .arm()
+            .then(() =>
+              player.queue.add({ line: h.line, preview: h.profile }, true),
+            )
+            .catch(fail);
+      }),
+    [player, muted, history],
+  );
   function test(text: string, speaker: string, voice: string) {
     if (voice)
       preview(
@@ -141,100 +162,125 @@ export function App() {
         .catch(fail);
   }
   return (
-    <main>
-      <Navigation screen={screen} open={open} health={health} />
-      {notice && (
-        <p role="alert" className="notice">
-          {notice} <button onClick={() => setNotice("")}>Dismiss</button>
-        </p>
-      )}
-      {health.status !== "ready" && (
-        <p role="status" className="notice">
-          {health.message}{" "}
-          {health.status === "error" && (
-            <button onClick={() => api.retry().catch(fail)}>
-              Retry AI Engine
-            </button>
-          )}
-        </p>
-      )}
-      <div className="layout" hidden={screen !== "Listen"}>
-        <div>
-          <DialogueMonitor
-            history={history}
-            status={speech}
-            queued={count}
-            muted={muted}
-            mute={() => {
-              player.mute(!muted);
-              setMuted(!muted);
-            }}
-            replay={(h) =>
-              void player
-                .arm()
-                .then(() =>
-                  player.queue.add({ line: h.line, preview: h.profile }, true),
-                )
-                .catch(fail)
-            }
-          />
-          <CapturePanel
-            config={data}
-            ready={ready}
-            save={save}
-            emit={(d) => player.queue.add({ line: d }, data.queue === "latest")}
-            stop={() => player.queue.stop()}
-            arm={player.arm}
-            log={log}
-          />
-        </div>
-        <aside>
-          <TestDialogue
-            voices={voices}
-            ready={ready}
-            play={test}
-            stop={() => player.queue.stop()}
-          />
-        </aside>
-      </div>
-      {screen === "Voices" && (
-        <Voices
-          cast={data.cast}
-          voices={voices}
-          save={save}
-          preview={preview}
-          fail={fail}
-        />
-      )}
-      {screen === "Settings" && (
-        <div className="layout">
-          <Settings data={data} voices={voices} save={save} fail={fail} />
-          <aside>
-            <section>
-              <h2>Local AI engine</h2>
-              <p>{health.message}</p>
-              <small>
-                First setup downloads the model. Capture and speech stay on this
-                PC.
-              </small>
-              <button
-                onClick={() => {
-                  player.queue.stop();
-                  void api.retry().catch(fail);
-                }}
-              >
+    <PersonalVoiceNames.Provider value={data.personalNames}>
+      <main>
+        <Navigation screen={screen} open={open} health={health} />
+        {notice && (
+          <p role="alert" className="notice">
+            {notice} <button onClick={() => setNotice("")}>Dismiss</button>
+          </p>
+        )}
+        {health.status !== "ready" && (
+          <p role="status" className="notice">
+            {health.message}{" "}
+            {health.status === "error" && (
+              <button onClick={() => api.retry().catch(fail)}>
                 Retry AI Engine
               </button>
-            </section>
-            <section>
-              <h2>Diagnostics</h2>
-              <small role="log">
-                {logs.join("\n") || "No events recorded."}
-              </small>
-            </section>
+            )}
+          </p>
+        )}
+        <div className="layout" hidden={screen !== "Listen"}>
+          <div>
+            <DialogueMonitor
+              history={history}
+              status={speech}
+              queued={count}
+              muted={muted}
+              mute={() => {
+                player.mute(!muted);
+                setMuted(!muted);
+              }}
+              replay={(h) =>
+                void player
+                  .arm()
+                  .then(() =>
+                    player.queue.add(
+                      { line: h.line, preview: h.profile },
+                      true,
+                    ),
+                  )
+                  .catch(fail)
+              }
+            />
+            <CapturePanel
+              config={data}
+              ready={ready}
+              save={save}
+              emit={(d) =>
+                player.queue.add({ line: d }, data.queue === "latest")
+              }
+              stop={() => player.queue.stop()}
+              arm={player.arm}
+              log={log}
+            />
+          </div>
+          <aside>
+            <TestDialogue
+              voices={voices}
+              ready={ready}
+              play={test}
+              stop={() => player.queue.stop()}
+            />
           </aside>
         </div>
-      )}
-    </main>
+        {screen === "Voices" && (
+          <>
+            <PersonalVoices
+              refresh={async () => {
+                setVoices(await api.voices());
+                save(await api.settings());
+              }}
+              tryVoice={(id) =>
+                test(
+                  "The court is ready to hear your testimony.",
+                  "Personal voice",
+                  id,
+                )
+              }
+            />
+            <Voices
+              cast={data.cast}
+              voices={voices}
+              save={save}
+              preview={preview}
+              fail={fail}
+            />
+          </>
+        )}
+        {screen === "Settings" && (
+          <div className="layout">
+            <div>
+              <Settings data={data} voices={voices} save={save} fail={fail} />
+              <VoiceSettings data={data} save={save} fail={fail} />
+            </div>
+            <aside>
+              <section>
+                <h2>Local AI engine</h2>
+                <p>{health.message}</p>
+                <small>
+                  First setup downloads the model. Capture and speech stay on
+                  this PC.
+                </small>
+                <button
+                  onClick={() => {
+                    player.queue.stop();
+                    void api.retry().catch(fail);
+                  }}
+                >
+                  Retry AI Engine
+                </button>
+              </section>
+              <section>
+                <h2>Diagnostics</h2>
+                <small role="log">
+                  {logs.join("\n") || "No events recorded."}
+                </small>
+              </section>
+            </aside>
+          </div>
+        )}
+      </main>
+    </PersonalVoiceNames.Provider>
   );
 }

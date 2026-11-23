@@ -5,6 +5,8 @@ import { randomBytes } from "node:crypto";
 import {
   health,
   modelId,
+  referenceModel,
+  voice,
   voiceList,
   type Speech,
   type Health,
@@ -25,7 +27,7 @@ export function stopEngine() {
     });
   else old.kill();
 }
-export function startEngine(root: string) {
+export function startEngine(root: string, dir: string) {
   stopEngine();
   failure = "";
   token = randomBytes(24).toString("hex");
@@ -45,7 +47,11 @@ export function startEngine(root: string) {
     ["server.py", String(port), String(process.pid)],
     {
       cwd,
-      env: { ...process.env, ACEVOICE_TOKEN: token },
+      env: {
+        ...process.env,
+        ACEVOICE_TOKEN: token,
+        ACEVOICE_REFERENCES: path.join(dir, "personal-voices"),
+      },
       windowsHide: true,
       stdio: ["ignore", "ignore", "pipe"],
     },
@@ -74,7 +80,9 @@ async function api(route: string, body?: unknown) {
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(body ? 90000 : 3000),
+    signal: AbortSignal.timeout(
+      route === "/v1/reference" ? 600000 : body ? 180000 : 3000,
+    ),
   });
   if (!res.ok)
     throw Error(
@@ -105,9 +113,16 @@ export async function synthesize(s: Speech) {
     await (
       await api("/v1/synthesize", {
         ...s,
-        modelId,
+        modelId: s.voiceId.startsWith("ref_") ? referenceModel : modelId,
         requestId: crypto.randomUUID(),
       })
     ).arrayBuffer(),
   );
+}
+export async function importReference(name: string, bytes: Uint8Array) {
+  const res = await api("/v1/reference", {
+    name,
+    wav: Buffer.from(bytes).toString("base64"),
+  });
+  return voice.parse((await res.json()).id);
 }

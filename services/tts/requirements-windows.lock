@@ -42,6 +42,8 @@ regex==2026.11.19
 rfc3986==1.5.0
 rpds-py==2026.9.1
 segments==2.4.0
+sherpa-onnx==2.0.3
+sherpa-onnx-core==2.0.3
 soundfile==0.13.1
 starlette==0.46.2
 termcolor==3.3.0

@@ -230,3 +230,152 @@ textarea {
   cursor: pointer;
   color: var(--gold);
 }
+
+/* Lacquered courtroom rail, brass trim and blue testimony nameplates. */
+body {
+  background: linear-gradient(180deg, #263451 0, #15213a 210px, #101929 650px);
+  border-top: 5px solid #b55248;
+}
+.masthead {
+  border-bottom: 4px double #b39462;
+  padding: 8px 0 20px;
+  margin-bottom: 0;
+}
+.court-badge {
+  width: 66px;
+  height: 66px;
+  filter: drop-shadow(0 3px 2px #090e1c);
+}
+.brand h1 {
+  font-size: clamp(32px, 4vw, 50px);
+  font-style: italic;
+  color: #fff0cd;
+  text-shadow: 2px 3px 0 #623b43;
+}
+nav {
+  padding-top: 12px;
+  gap: 6px;
+  border-bottom: 4px solid #957048;
+}
+nav button {
+  border-radius: 6px 6px 0 0;
+  padding: 9px 28px;
+  background: #233456;
+  color: #cfdae9;
+  border: 1px solid #435474;
+  border-bottom: 0;
+}
+nav button[aria-current] {
+  background: #f1deb9;
+  color: #26253a;
+  box-shadow: inset 0 3px #b5504f;
+  font-weight: 700;
+}
+section {
+  border-radius: 5px;
+  border-color: #40516a;
+  box-shadow: 0 3px 10px #0b132333;
+}
+.monitor {
+  background: linear-gradient(112deg, #192941, #101623);
+  border: 3px double #b8a07a;
+}
+.monitor strong {
+  background: linear-gradient(110deg, #2f5081, #1d3459);
+  border: 1px solid #af9468;
+  color: #ffedc8;
+  padding: 2px 18px;
+  font-family: Georgia, serif;
+  letter-spacing: 0.02em;
+}
+.monitor blockquote {
+  padding: 12px 0;
+  margin: 5px 0 12px;
+  border-bottom: 1px solid #6c624f;
+  color: #fcf7ed;
+}
+.primary {
+  background: linear-gradient(#fad69b, #dbb46c);
+  border-color: #e8c888;
+}
+.voice-layout > section {
+  border-top: 4px solid #af564e;
+}
+.cast-list button[aria-pressed="true"] {
+  background: #3c3650;
+  border-color: #e7c787;
+}
+@media (max-width: 760px) {
+  .court-badge {
+    width: 46px;
+    height: 46px;
+  }
+  .masthead {
+    gap: 14px;
+  }
+  nav button {
+    padding: 8px 14px;
+  }
+}
+.voice-picker {
+  position: relative;
+  margin: 8px 0;
+}
+.voice-picker label {
+  display: block;
+  margin: 0 0 3px;
+}
+.picker-input {
+  position: relative;
+}
+.picker-input input {
+  width: 100%;
+  padding-right: 30px;
+}
+.picker-input:after {
+  content: "▾";
+  position: absolute;
+  right: 12px;
+  top: 7px;
+  color: var(--gold);
+  pointer-events: none;
+}
+.voice-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: #14223a;
+  border: 1px solid #bca47e;
+  border-radius: 4px;
+  box-shadow: 0 8px 22px #090d16aa;
+  max-height: min(240px, 35vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.voice-menu.above {
+  top: auto;
+  bottom: calc(100% - 20px);
+}
+.voice-group {
+  padding: 6px 10px;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 12px;
+  background: #1c2b40;
+}
+.voice-menu [role="option"] {
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.voice-menu [role="option"].active,
+.voice-menu [role="option"]:hover {
+  background: #354c71;
+}
+.voice-menu [aria-selected="true"] {
+  box-shadow: inset 3px 0 var(--gold);
+}
+.voice-menu small {
+  padding: 6px 12px;
+}

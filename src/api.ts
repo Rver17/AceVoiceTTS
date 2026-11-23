@@ -15,6 +15,11 @@ export interface Readout {
   confidence: number;
 }
 interface API {
+  importVoice(p: { name: string; bytes: Uint8Array }): Promise<string>;
+  exportPreset(): Promise<boolean>;
+  importPreset(p: unknown): Promise<Config>;
+  shortcutConflicts(): Promise<string[]>;
+  onHotkey(fn: (action: string) => void): () => void;
   settings(): Promise<Config>;
   preferences(
     p: Partial<Omit<Config, "cast" | "version" | "calibration">>,

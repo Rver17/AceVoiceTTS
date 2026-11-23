@@ -1,4 +1,12 @@
-# Windows test results · AceVoice 0.2.0
+# Windows test results
+
+## AceVoice 0.3.1
+
+Verified the versioned portable Windows executable credited to Koro LTCM. All seven embedded icon images match the source badge. The packaged customization test imported an audio file, generated new speech, searched for the personal voice by partial name, selected it with Enter, saved a character assignment, exported and reimported a cast preset, saved a pronunciation, and synthesized another sentence after relaunch. The microphone test exercised recording with a synthetic input device. Physical microphone quality and global hotkeys during actual gameplay still require a player test.
+
+The packaged capture regression test passed with a synthetic Windows game window, two successive dialogue lines, the narrator, cache and restored settings. Nine TypeScript tests and both Python service tests passed. Type checking and the release build passed.
+
+## AceVoice 0.2.0
 
 Developer: Koro LTCM. Tested November 24, 2026.
 
@@ -15,4 +23,5 @@ Commands: `npm.cmd run build`, `npm.cmd run lint`, `npm.cmd test`, Python pytest
 One packaged CPU fixture run with the model already installed measured 9.92 seconds from launch to ready, 2.06 seconds from an uncached Phoenix preview click to playback, and 3.62 seconds from starting capture to first fixture playback. These measurements include desktop/UI polling and are specific to this run.
 
 Executable SHA-256: `2C8A858CDE3D8D31B8AD3E26535CB6CCCFC30AB79DD31CF97918004C9EE3B837`.
+
 
