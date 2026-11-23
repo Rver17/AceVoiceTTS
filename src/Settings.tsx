@@ -1,0 +1,96 @@
+import { VoiceOptions } from "./VoiceOptions";
+import { useState } from "react";
+import { api } from "./api";
+import type { Config } from "../core/contracts";
+export function Settings({
+  data,
+  voices,
+  save,
+  fail,
+}: {
+  data: Config;
+  voices: string[];
+  save: (c: Config) => void;
+  fail: (e: unknown) => void;
+}) {
+  const [size, setSize] = useState("");
+  const patch = (p: Partial<Config>) =>
+    api.preferences(p).then(save).catch(fail);
+  return (
+    <section>
+      <h2>Listening settings</h2>
+      <label>
+        <input
+          type="checkbox"
+          checked={data.auto}
+          onChange={(e) => patch({ auto: e.target.checked })}
+        />{" "}
+        Auto-assign character voices
+      </label>
+      <label>
+        Default voice
+        <select
+          value={data.defaultVoice ?? ""}
+          onChange={(e) => patch({ defaultVoice: e.target.value || null })}
+        >
+          <option value="">First available</option>
+          <VoiceOptions voices={voices} />
+        </select>
+      </label>
+      <label>
+        On new dialogue
+        <select
+          value={data.queue}
+          onChange={(e) => patch({ queue: e.target.value as Config["queue"] })}
+        >
+          <option value="latest">Stop old and speak latest</option>
+          <option value="finish">Finish current · FIFO</option>
+        </select>
+      </label>
+      {(
+        [
+          ["volume", "Output volume", 0, 1, 0.05],
+          ["fps", "Frames per second", 2, 6, 1],
+          ["stableMs", "Stable text (ms)", 250, 500, 25],
+          ["confidence", "Minimum OCR confidence (%)", 40, 95, 1],
+          ["contrast", "OCR contrast", 1, 3, 0.1],
+        ] as const
+      ).map(([k, label, min, max, step]) => (
+        <label key={k}>
+          {label} · {data[k]}
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={data[k]}
+            onChange={(e) => patch({ [k]: Number(e.target.value) })}
+          />
+        </label>
+      ))}
+      <div className="row">
+        <button
+          onClick={() =>
+            api
+              .cache()
+              .then((n) => setSize((n / 1048576).toFixed(1) + " MB"))
+              .catch(fail)
+          }
+        >
+          Cache usage
+        </button>
+        <button
+          onClick={() =>
+            api
+              .clear()
+              .then(() => setSize("0 MB"))
+              .catch(fail)
+          }
+        >
+          Clear cache
+        </button>
+        {size}
+      </div>
+    </section>
+  );
+}

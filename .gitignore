@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-shell/
+.venv/
+__pycache__/
+.pytest_cache/
+*.onnx
+*.bin
+*.wav
+*.traineddata*
+.env
+
+release/

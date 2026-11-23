@@ -1,0 +1,161 @@
+:root {
+  font:
+    15px/1.5 "Segoe UI",
+    sans-serif;
+  color: #e9f0f1;
+  background: #101820;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1320px;
+  margin: auto;
+  padding: 28px;
+}
+.title,
+header,
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.title,
+header {
+  justify-content: space-between;
+}
+.title {
+  margin-bottom: 22px;
+}
+.title p,
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+h1 {
+  font-size: 34px;
+  letter-spacing: -1px;
+}
+h2 {
+  font-size: 19px;
+  margin-bottom: 10px;
+}
+.layout {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 18px;
+}
+.layout > * {
+  min-width: 0;
+}
+section {
+  background: #18232d;
+  border: 1px solid #374653;
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+output {
+  color: #83e3cb;
+  font-size: 13px;
+}
+small,
+p {
+  color: #bed0da;
+}
+small {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 250px;
+  overflow: auto;
+  margin: 8px 0;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  border-radius: 5px;
+  border: 1px solid #51606e;
+  background: #101b25;
+  color: inherit;
+  padding: 7px 10px;
+  max-width: 100%;
+}
+button {
+  cursor: pointer;
+  background: #2c3c49;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.primary {
+  background: #8ae0c9;
+  color: #102820;
+  font-weight: 600;
+}
+label {
+  display: block;
+  margin: 8px 0;
+}
+label input:not([type="checkbox"]),
+label select,
+textarea {
+  display: block;
+  width: 100%;
+  margin-top: 3px;
+}
+.row {
+  margin: 10px 0;
+}
+.row select {
+  min-width: 0;
+  flex: 1;
+}
+.row label {
+  flex: 1;
+}
+blockquote {
+  margin: 10px 0;
+  font-size: 19px;
+  overflow-wrap: anywhere;
+}
+.preview {
+  position: relative;
+  touch-action: none;
+  line-height: 0;
+  cursor: crosshair;
+}
+.preview video {
+  width: 100%;
+  height: auto;
+}
+.box {
+  position: absolute;
+  border: 2px solid #51e0ce;
+  pointer-events: none;
+}
+.speakerNameBox {
+  border-color: #ffd775;
+}
+form {
+  border-top: 1px solid #435560;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  main {
+    padding: 14px;
+  }
+}
