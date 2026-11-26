@@ -126,3 +126,75 @@ export async function importReference(name: string, bytes: Uint8Array) {
   });
   return voice.parse((await res.json()).id);
 }
+export async function deleteReference(id: string) {
+  const res = await fetch(
+    "http://127.0.0.1:" + port + "/v1/reference/" + voice.parse(id),
+    {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + token },
+      signal: AbortSignal.timeout(15000),
+    },
+  );
+  if (!res.ok && res.status !== 404)
+    throw Error(
+      "Kokoro " + res.status + " " + (await res.text()).slice(0, 400),
+    );
+}
+/** Streams 16-bit mono PCM chunks as the engine produces them. */
+export async function streamSynthesize(
+  s: Speech,
+  onChunk: (rate: number, pcm: Buffer) => void,
+  signal: AbortSignal,
+) {
+  const res = await fetch("http://127.0.0.1:" + port + "/v1/synthesize/stream", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + token,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...s,
+      modelId: s.voiceId.startsWith("ref_") ? referenceModel : modelId,
+      requestId: crypto.randomUUID(),
+    }),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(180000)]),
+  });
+  if (!res.ok || !res.body)
+    throw Error(
+      "Kokoro " + res.status + " " + (await res.text()).slice(0, 400),
+    );
+  let rate = 0,
+    carry = Buffer.alloc(0);
+  for await (const part of res.body as unknown as AsyncIterable<Uint8Array>) {
+    let buf = Buffer.concat([carry, part]);
+    if (!rate) {
+      if (buf.length < 4) {
+        carry = buf;
+        continue;
+      }
+      rate = buf.readUInt32LE(0);
+      buf = buf.subarray(4);
+    }
+    const usable = buf.length - (buf.length % 2);
+    carry = Buffer.from(buf.subarray(usable));
+    if (usable) onChunk(rate, Buffer.from(buf.subarray(0, usable)));
+  }
+  if (!rate) throw Error("Kokoro returned no audio");
+}
+export function wavFile(rate: number, pcm: Buffer) {
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0);
+  h.writeUInt32LE(36 + pcm.length, 4);
+  h.write("WAVEfmt ", 8);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36);
+  h.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([h, pcm]);
+}
+

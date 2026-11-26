@@ -27,6 +27,14 @@ export function Settings({
         />{" "}
         Auto-assign character voices
       </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={data.progressive}
+          onChange={(e) => patch({ progressive: e.target.checked })}
+        />{" "}
+        Speak sentences while the text is still typing
+      </label>
       <VoicePicker
         label="Default voice"
         voices={voices}
@@ -42,6 +50,18 @@ export function Settings({
         >
           <option value="latest">Stop old and speak latest</option>
           <option value="finish">Finish current · FIFO</option>
+        </select>
+      </label>
+      <label>
+        Playback mode
+        <select
+          value={data.playback}
+          onChange={(e) =>
+            patch({ playback: e.target.value as Config["playback"] })
+          }
+        >
+          <option value="stream">Play while generating (fastest)</option>
+          <option value="complete">Wait for full speech (smoothest)</option>
         </select>
       </label>
       {(

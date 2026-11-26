@@ -40,6 +40,8 @@ export const config = z.object({
   auto: z.boolean(),
   defaultVoice: voice.nullable(),
   queue: z.enum(["latest", "finish"]),
+  playback: z.enum(["stream", "complete"]).default("stream"),
+  progressive: z.boolean().default(true),
   volume,
   fps: z.number().int().min(2).max(6),
   stableMs: z.number().min(250).max(500),
@@ -57,6 +59,8 @@ export const defaults: Config = {
   auto: true,
   defaultVoice: null,
   queue: "latest",
+  playback: "stream",
+  progressive: true,
   volume: 0.85,
   fps: 3,
   stableMs: 450,
@@ -74,6 +78,7 @@ export const event = z.object({
   kind: z.literal("scene-card").optional(),
   confidence: volume,
   isComplete: z.literal(true),
+  continuation: z.boolean().optional(),
 });
 export type Dialogue = z.infer<typeof event>;
 export const health = z.object({

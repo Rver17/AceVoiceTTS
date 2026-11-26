@@ -4,9 +4,13 @@ import { prepareAudio } from "./referenceAudio";
 export function PersonalVoices({
   refresh,
   tryVoice,
+  mine,
+  names,
 }: {
   refresh: () => Promise<void>;
   tryVoice: (id: string) => void;
+  mine: string[];
+  names: Record<string, string>;
 }) {
   const [name, setName] = useState(""),
     [clip, setClip] = useState<Blob | null>(null),
@@ -141,6 +145,42 @@ export function PersonalVoices({
           </button>
         )}
       </div>
+      {mine.length > 0 && (
+        <div>
+          <h3>Your custom voices</h3>
+          {mine.map((id) => (
+            <div className="row" key={id}>
+              <span>{names[id] ?? id}</span>
+              <button onClick={() => tryVoice(id)}>Preview</button>
+              <button
+                aria-label={"Delete " + (names[id] ?? id)}
+                disabled={busy}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      `Delete "${names[id] ?? id}"? Characters using it return to automatic voices.`,
+                    )
+                  )
+                    return;
+                  setBusy(true);
+                  try {
+                    await api.deleteVoice(id);
+                    await refresh();
+                    if (added === id) setAdded("");
+                    setInfo("Voice deleted.");
+                  } catch (e) {
+                    setInfo(String(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <small role="status">{info}</small>
     </section>
   );

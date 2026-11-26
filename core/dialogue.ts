@@ -86,7 +86,32 @@ export class Stabilizer {
   private spoken = "";
   private blanks = 0;
   private sceneKey = crypto.randomUUID();
+  private emitted = "";
+  private prevText = "";
+  private finalSpeaker: string | null = null;
+  private follows(text: string) {
+    const letters = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+    const a = letters(this.emitted),
+      b = letters(text).slice(0, a.length);
+    if (!a.length || b.length < a.length) return false;
+    let same = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] === b[i]) same++;
+    return same / a.length >= 0.85;
+  }
+  // Next finished sentence or long clause in the not-yet-spoken text. A boundary
+  // only counts once more text has appeared after it (the typewriter moved on).
+  private segment(rest: string) {
+    const sentence = /^(.+?[.!?…]+["'”’)]*)\s+(?=\S)/u.exec(rest);
+    const clause = /^(.{30,}?[,;:—–])\s+(?=\S)/u.exec(rest);
+    const abbreviation = /\b(?:mr|mrs|ms|dr|st|prof|jr|sr|vs|no)\.$/i;
+    const match = [sentence, clause]
+      .filter((m): m is RegExpExecArray => !!m && !abbreviation.test(m[1]))
+      .sort((a, b) => a[0].length - b[0].length)[0];
+    return match ?? null;
+  }
   reset() {
+    this.emitted = this.prevText = "";
+    this.finalSpeaker = null;
     this.candidate = this.spoken = "";
     this.blanks = 0;
     this.sceneKey = crypto.randomUUID();
@@ -99,6 +124,7 @@ export class Stabilizer {
     delay: number,
     threshold: number,
     kind?: "scene-card",
+    progressive = false,
   ): Dialogue | null {
     const text = clean(raw);
     if (!text) {
@@ -129,28 +155,55 @@ export class Stabilizer {
     if (kind === "scene-card" || episodePrompt(text) || !resolve(speaker, []))
       speaker = null;
     const id = JSON.stringify([kind, keyOf(speaker ?? ""), text]);
-    if (id !== this.candidate) {
+    const changed = id !== this.candidate;
+    if (changed) {
       this.candidate = id;
       this.since = now;
-      return null;
     }
+    const previous = this.prevText;
+    this.prevText = text;
+    if (this.emitted && !this.follows(text)) this.emitted = "";
+    // A finished line shown again under another speaker is a new line.
+    if (this.emitted && this.finalSpeaker !== null && this.finalSpeaker !== keyOf(speaker ?? ""))
+      this.emitted = "";
+    if (!this.emitted) this.finalSpeaker = null;
+    const make = (spoken: string, continuation: boolean): Dialogue => ({
+      eventId: crypto.randomUUID(),
+      source: "ocr",
+      sceneKey: this.sceneKey,
+      kind,
+      observedAt: now,
+      text: spoken,
+      speakerRaw: speaker,
+      speakerKey: resolve(speaker, [])?.display.toLowerCase() ?? null,
+      confidence,
+      isComplete: true,
+      ...(continuation ? { continuation } : {}),
+    });
+    // Typewriter text: speak each finished sentence while the rest is still typing.
+    if (progressive && !needsConfirmation && !kind && id !== this.spoken) {
+      const match = this.segment(text.slice(this.emitted.length));
+      if (match) {
+        const next = this.emitted + match[0];
+        // The same sentence must have been read in the previous frame too.
+        if (previous.startsWith(next.trimEnd())) {
+          const first = !this.emitted;
+          this.emitted = next;
+          return make(match[1].trim(), !first);
+        }
+      }
+    }
+    if (changed) return null;
     const settleMs =
       needsConfirmation || kind === "scene-card"
         ? Math.max(900, delay * 2)
         : delay;
     if (now - this.since < settleMs || id === this.spoken) return null;
     this.spoken = id;
-    return {
-      eventId: crypto.randomUUID(),
-      source: "ocr",
-      sceneKey: this.sceneKey,
-      kind,
-      observedAt: now,
-      text,
-      speakerRaw: speaker,
-      speakerKey: resolve(speaker, [])?.display.toLowerCase() ?? null,
-      confidence,
-      isComplete: true,
-    };
+    const rest = this.emitted ? text.slice(this.emitted.length).trim() : text;
+    const continued = !!this.emitted;
+    this.emitted = text;
+    this.finalSpeaker = keyOf(speaker ?? "");
+    return rest.length ? make(rest, continued) : null;
   }
 }

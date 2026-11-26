@@ -3,6 +3,7 @@ import hashlib
 import io
 from itertools import combinations
 import os
+import re
 import secrets
 import threading
 import urllib.request
@@ -11,7 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 MODEL = "kokoro-82m-onnx-v1.0"
@@ -61,6 +62,10 @@ def initialize():
         blends = [f"{a}_mix_{b}" for a, b in combinations(installed, 2) if language(a) == language(b)]
         engine, voices = model, installed + blends
         state.update(status="ready", device="cuda" if session.get_providers()[0] == "CUDAExecutionProvider" else "cpu", message="Kokoro ready")
+        try:
+            personal.warm(directory)
+        except Exception:
+            pass
     except Exception as exc:
         state.update(status="error", message=f"{exc}. Check Python dependencies and model files, then retry.")
 
@@ -147,6 +152,86 @@ def synthesize(data: Synthesis):
         raise HTTPException(422, f"Synthesis failed: {exc}") from exc
     finally:
         inference.release()
+
+
+@app.delete("/v1/reference/{voice_id}")
+def delete_reference(voice_id: str):
+    if not inference.acquire(timeout=10):
+        raise HTTPException(429, "Synthesis busy")
+    try:
+        personal.remove(voice_id)
+        return {"deleted": voice_id}
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(422, f"Voice delete failed: {exc}") from exc
+    finally:
+        inference.release()
+
+
+def pieces(text):
+    """Split text so the first audio is ready quickly: short first piece, then sentences."""
+    parts = [p.strip() for p in re.findall(r"[^.!?…]+[.!?…]*[\"'”’)]*", text) if p.strip()]
+    out = []
+    for part in parts:
+        if out and len(out[-1]) < 25:
+            out[-1] += " " + part
+        else:
+            out.append(part)
+    if out and len(out[0]) > 40:
+        head, sep, tail = out[0][:70].rpartition(", ")
+        if sep and len(head) > 10:
+            out[0:1] = [head + ",", out[0][len(head) + 2:]]
+    return out or [text]
+
+
+@app.post("/v1/synthesize/stream")
+def synthesize_stream(data: Synthesis):
+    if state["status"] != "ready":
+        raise HTTPException(503, state["message"])
+    custom = data.voiceId in personal.listed()
+    expected_model = personal.PACK if custom else MODEL
+    if (not custom and data.voiceId not in voices) or data.modelId != expected_model:
+        raise HTTPException(422, "Unknown voice or model")
+    if not inference.acquire(timeout=10):
+        raise HTTPException(429, "Synthesis busy")
+    style = data.voiceId
+    try:
+        if "_mix_" in style:
+            first, second = style.split("_mix_")
+            style = (engine.get_voice_style(first) + engine.get_voice_style(second)) * 0.5
+    except Exception as exc:
+        inference.release()
+        raise HTTPException(422, f"Synthesis failed: {exc}") from exc
+
+    def chunks():
+        try:
+            import numpy as np
+            sent = False
+            def produced():
+                if custom:
+                    yield from personal.stream(data.voiceId, data.text, data.speed, directory)
+                else:
+                    for piece in pieces(data.text):
+                        yield engine.create(piece, voice=style, speed=data.speed, lang=language(data.voiceId))
+
+            source = produced()
+            try:
+                for samples, rate in source:
+                    if not samples.size:
+                        continue
+                    if not sent:
+                        yield int(rate).to_bytes(4, "little")
+                        sent = True
+                    yield (np.clip(np.asarray(samples), -1, 1) * 32767).astype("<i2").tobytes()
+            finally:
+                source.close()
+            if not sent:
+                raise ValueError("No pronounceable audio")
+        finally:
+            inference.release()
+
+    return StreamingResponse(chunks(), media_type="application/octet-stream")
 
 
 

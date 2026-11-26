@@ -53,14 +53,16 @@ export class AudioCache {
   async clear() {
     for (const e of await this.entries()) await fsp.rm(e.file, { force: true });
   }
-  async audio(s: Speech, create: (s: Speech) => Promise<Buffer>) {
-    const file = path.join(this.dir, cacheKey(s) + ".wav");
+  async get(s: Speech) {
     try {
-      return await fsp.readFile(file);
+      return await fsp.readFile(path.join(this.dir, cacheKey(s) + ".wav"));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      return null;
     }
-    const audio = await create(s);
+  }
+  async put(s: Speech, audio: Buffer) {
+    const file = path.join(this.dir, cacheKey(s) + ".wav");
     const entries = (await this.entries()).sort(
       (a, b) => a.mtimeMs - b.mtimeMs,
     );
@@ -77,6 +79,12 @@ export class AudioCache {
     } finally {
       await fsp.rm(temp, { force: true });
     }
+  }
+  async audio(s: Speech, create: (s: Speech) => Promise<Buffer>) {
+    const hit = await this.get(s);
+    if (hit) return hit;
+    const audio = await create(s);
+    await this.put(s, audio);
     return audio;
   }
 }

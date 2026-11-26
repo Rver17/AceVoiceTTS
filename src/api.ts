@@ -14,7 +14,18 @@ export interface Readout {
   text: string;
   confidence: number;
 }
+export interface AudioMessage {
+  id: string;
+  rate?: number;
+  pcm?: Uint8Array;
+  done?: boolean;
+  error?: string;
+}
 interface API {
+  audioStream(p: { id: string; speech: Speech }): Promise<Uint8Array | null>;
+  audioCancel(id: string): Promise<void>;
+  onAudio(fn: (m: AudioMessage) => void): () => void;
+  deleteVoice(id: string): Promise<Config>;
   importVoice(p: { name: string; bytes: Uint8Array }): Promise<string>;
   exportPreset(): Promise<boolean>;
   importPreset(p: unknown): Promise<Config>;

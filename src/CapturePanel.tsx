@@ -209,6 +209,7 @@ export function CapturePanel(props: Props) {
         props.config.stableMs,
         props.config.confidence / 100,
         observation.kind,
+        props.config.progressive,
       );
       if (d) {
         props.log(info);

@@ -87,6 +87,81 @@ def add(name, encoded, models):
     return key
 
 
+def remove(key):
+    if not ID.fullmatch(key):
+        raise ValueError("Invalid reference voice")
+    path = library() / (key + ".wav")
+    if not path.is_file():
+        raise FileNotFoundError("Voice not found")
+    path.unlink()
+
+
+_refs = {}
+
+
+def reference(key):
+    if key not in _refs:
+        if not ID.fullmatch(key):
+            raise ValueError("Invalid reference voice")
+        _refs.clear()
+        _refs[key] = sf.read(library() / (key + ".wav"), dtype="float32")
+    return _refs[key]
+
+
+def stream(key, text, speed, models):
+    """Yield (samples, rate) as the model produces them instead of waiting for the whole clip."""
+    import queue
+    import sherpa_onnx as sherpa
+    audio, rate = reference(key)
+    tts = load(models)
+    config = sherpa.GenerationConfig()
+    config.reference_audio = audio
+    config.reference_sample_rate = rate
+    config.speed = speed
+    chunks = queue.Queue()
+    stop = threading.Event()
+
+    def callback(samples, progress):
+        chunks.put(np.array(samples, dtype="float32"))
+        return 0 if stop.is_set() else 1
+
+    def work():
+        try:
+            result = tts.generate(text, config, callback)
+            chunks.put((np.asarray(result.samples, dtype="float32"), result.sample_rate))
+        except Exception as exc:
+            chunks.put(exc)
+        chunks.put(None)
+
+    worker = threading.Thread(target=work, daemon=True)
+    worker.start()
+    streamed = 0
+    try:
+        while True:
+            item = chunks.get()
+            if item is None:
+                return
+            if isinstance(item, Exception):
+                raise item
+            if isinstance(item, tuple):
+                # Final result: only emit it if the callback delivered nothing.
+                if streamed == 0:
+                    yield item
+                return
+            streamed += item.size
+            yield item, 24000
+    finally:
+        stop.set()
+        worker.join()
+
+
+def warm(models):
+    """Load the reference model in the background when it is already downloaded."""
+    folder = models / PACK
+    if all((folder / f).is_file() for f in FILES.values()):
+        load(models)
+
+
 def generate(key, text, speed, models):
     import sherpa_onnx as sherpa
     if not ID.fullmatch(key):

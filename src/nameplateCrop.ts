@@ -10,7 +10,7 @@ export function nameplateCrop(video: HTMLVideoElement, region: Rect) {
   const sample = document.createElement("canvas");
   sample.width = Math.max(
     1,
-    Math.min(480, Math.round(width * video.videoWidth)),
+    Math.min(1600, Math.round(width * video.videoWidth)),
   );
   sample.height = Math.max(
     1,

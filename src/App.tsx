@@ -208,7 +208,10 @@ export function App() {
               ready={ready}
               save={save}
               emit={(d) =>
-                player.queue.add({ line: d }, data.queue === "latest")
+                player.queue.add(
+                  { line: d },
+                  !d.continuation && data.queue === "latest",
+                )
               }
               stop={() => player.queue.stop()}
               arm={player.arm}
@@ -227,6 +230,8 @@ export function App() {
         {screen === "Voices" && (
           <>
             <PersonalVoices
+              mine={voices.filter((v) => v.startsWith("ref_"))}
+              names={data.personalNames}
               refresh={async () => {
                 setVoices(await api.voices());
                 save(await api.settings());

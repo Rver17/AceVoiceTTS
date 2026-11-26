@@ -20,6 +20,7 @@ import {
   profile,
   speech,
   name,
+  voice,
 } from "../core/contracts";
 import { allocate, resolve } from "../core/dialogue";
 import { isNarration, MysteryCasting } from "../core/scene";
@@ -30,6 +31,9 @@ import {
   installed,
   synthesize,
   importReference,
+  deleteReference,
+  streamSynthesize,
+  wavFile,
 } from "./engine";
 import { AudioCache, readConfig, writeConfig } from "./store";
 import { recognize, closeOCR } from "./ocr";
@@ -227,6 +231,61 @@ else
         synthesize,
       ),
     );
+    const streams = new Map<string, AbortController>();
+    handle(
+      "audioStream",
+      z.object({ id: z.string().uuid(), speech }),
+      async ({ id, speech: raw }) => {
+        const s = speech.parse({
+          ...raw,
+          text: pronounce(raw.text, readConfig(dir).pronunciations),
+        });
+        const hit = await cache.get(s);
+        if (hit) return hit;
+        const ctl = new AbortController();
+        streams.set(id, ctl);
+        const send = (m: object) => {
+          if (!win.isDestroyed()) win.webContents.send("audioChunk", { id, ...m });
+        };
+        void (async () => {
+          const parts: Buffer[] = [];
+          let rate = 24000;
+          try {
+            await streamSynthesize(
+              s,
+              (r, pcm) => {
+                rate = r;
+                parts.push(pcm);
+                send({ rate: r, pcm });
+              },
+              ctl.signal,
+            );
+            if (ctl.signal.aborted) return;
+            await cache
+              .put(s, wavFile(rate, Buffer.concat(parts)))
+              .catch(() => undefined);
+            send({ done: true });
+          } catch (e) {
+            if (!ctl.signal.aborted) send({ error: String(e) });
+          } finally {
+            streams.delete(id);
+          }
+        })();
+        return null;
+      },
+    );
+    handle("audioCancel", z.string().uuid(), (id) => {
+      streams.get(id)?.abort();
+    });
+    handle("deleteVoice", voice, async (id) => {
+      await deleteReference(id);
+      const data = readConfig(dir);
+      delete data.personalNames[id];
+      data.cast = data.cast.filter((c) => c.voiceId !== id);
+      if (data.defaultVoice === id) data.defaultVoice = null;
+      writeConfig(dir, data);
+      return data;
+    });
     handle("cache", empty, async () =>
       (await cache.entries()).reduce((n, e) => n + e.size, 0),
     );
