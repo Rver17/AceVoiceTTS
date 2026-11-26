@@ -1,5 +1,8 @@
 import { api, type Regions, type Readout } from "./api";
 import type { Rect } from "../core/contracts";
+import { nameplateCrop } from "./nameplateCrop";
+import { sceneCardCrop } from "./sceneCardCrop";
+import { findDialoguePanel, panelTextRegion } from "./dialoguePanel";
 
 function crop(video: HTMLVideoElement, r: Rect, contrast: number) {
   const { videoWidth: w, videoHeight: h } = video;
@@ -33,13 +36,32 @@ async function png(canvas: HTMLCanvasElement) {
 export class Recognition {
   private signature = "";
   private previous: Readout[] = [];
-  async read(video: HTMLVideoElement, r: Regions, contrast: number) {
-    if (video.readyState < 2 || !video.videoWidth)
-      throw Error("Frame unavailable. Restore the window or choose a display.");
-    const canvases = [
-      crop(video, r.dialogueBox, contrast),
-      crop(video, r.speakerNameBox, contrast),
-    ];
+  async read(
+    video: HTMLVideoElement,
+    r: Regions,
+    contrast: number,
+    manual = false,
+  ) {
+    if (video.readyState < 2 || !video.videoWidth) return null;
+    const card = sceneCardCrop(video);
+    const panel = !manual && !card ? findDialoguePanel(video) : null;
+    const search = manual
+      ? r.speakerNameBox
+      : {
+          x: 0.035,
+          y: Math.max(0.38, (panel?.y ?? 0.68) - 0.08),
+          w: 0.43,
+          h: 0.15,
+        };
+    const plate = card ? null : nameplateCrop(video, search);
+    const textRegion = panel
+      ? panelTextRegion(panel, plate?.bottom)
+      : r.dialogueBox;
+    const canvases = [card ?? crop(video, textRegion, contrast)];
+    if (!card) {
+      if (!panel) canvases.push(crop(video, r.speakerNameBox, contrast));
+      if (plate) canvases.push(plate.canvas);
+    }
     const signature = canvases
       .map((c) => {
         const pixels = c
@@ -54,15 +76,16 @@ export class Recognition {
         return bright ? String(hash) : "black";
       })
       .join("/");
-    if (signature === "black/black")
-      throw Error(
-        "Black capture regions. Restore the window, use borderless mode, or choose a display.",
-      );
-    if (signature !== this.signature) {
+    if (signature.split("/").every((part) => part === "black")) return null;
+    const cacheKey = (card ? "card/" : "game/") + signature;
+    if (cacheKey !== this.signature) {
       const result = await api.ocr(await Promise.all(canvases.map(png)));
       this.previous = result;
-      this.signature = signature;
+      this.signature = cacheKey;
     }
-    return this.previous;
+    return {
+      reads: this.previous,
+      kind: card ? ("scene-card" as const) : undefined,
+    };
   }
 }

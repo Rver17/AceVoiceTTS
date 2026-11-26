@@ -22,6 +22,7 @@ import {
   name,
 } from "../core/contracts";
 import { allocate, resolve } from "../core/dialogue";
+import { isNarration, MysteryCasting } from "../core/scene";
 import {
   startEngine,
   stopEngine,
@@ -164,10 +165,15 @@ else
         return data;
       },
     );
+    const mystery = new MysteryCasting();
     handle("assign", event, async (line) => {
       const voices = await installed(),
         data = readConfig(dir);
-      const p = allocate(line.speakerRaw, data.cast, voices);
+      const narration = isNarration(line);
+      const p = allocate(narration ? null : line.speakerRaw, data.cast, voices);
+      if (data.auto && !narration && p.key === "narrator")
+        return mystery.pick(line, voices, data.cast, p);
+      mystery.end();
       if (!data.auto && resolve(line.speakerRaw, data.cast)) {
         return {
           ...p,
@@ -246,7 +252,8 @@ else
             .instanceof(Uint8Array)
             .refine((b) => b.length > 0 && b.length <= 16_000_000),
         )
-        .length(2),
+        .min(1)
+        .max(3),
       async (images) => {
         if (busy) throw Error("Recognition busy");
         busy = true;

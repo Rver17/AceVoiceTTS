@@ -32,6 +32,7 @@ export const profile = z.object({
 export type Profile = z.infer<typeof profile>;
 export const config = z.object({
   version: z.literal(1),
+  manualRegions: z.boolean().default(false),
   pronunciations: dictionary.default([]),
   personalNames: z.record(z.string(), name.max(32)).default({}),
   cast: z.array(profile),
@@ -48,6 +49,7 @@ export const config = z.object({
 export type Config = z.infer<typeof config>;
 export const defaults: Config = {
   version: 1,
+  manualRegions: false,
   pronunciations: [],
   personalNames: {},
   cast: [],
@@ -69,6 +71,7 @@ export const event = z.object({
   speakerRaw: name.nullable(),
   speakerKey: name.nullable(),
   sceneKey: z.string().nullable().optional(),
+  kind: z.literal("scene-card").optional(),
   confidence: volume,
   isComplete: z.literal(true),
 });

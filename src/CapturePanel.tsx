@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { api, type Source, type Regions } from "./api";
 import { Recognition } from "./recognition";
 import { Stabilizer } from "../core/dialogue";
+import { readNameplate } from "../core/nameplate";
 import {
   clean,
   type Config,
@@ -37,6 +38,8 @@ export function CapturePanel(props: Props) {
     captureId = useRef(0),
     busy = useRef(false),
     latest = useRef(props);
+  const retryAt = useRef(0),
+    lastError = useRef("");
   latest.current = props;
   useEffect(
     () =>
@@ -57,6 +60,8 @@ export function CapturePanel(props: Props) {
     recognizer = useRef(new Recognition());
   function halt() {
     epoch.current++;
+    retryAt.current = 0;
+    lastError.current = "";
     props.stop();
     stabilizer.current.reset();
     recognizer.current = new Recognition();
@@ -97,8 +102,13 @@ export function CapturePanel(props: Props) {
       stream.current = s;
       const v = video.current!;
       v.srcObject = s;
+      let lastSize = "";
       const update = () => {
         if (stream.current !== s || !v.videoWidth) return;
+        const size = v.videoWidth + "x" + v.videoHeight;
+        if (size === lastSize) return;
+        const firstSize = !lastSize;
+        lastSize = size;
         halt();
         const selected = sources.find((i) => i.id === source)!;
         const profileKey = [
@@ -108,9 +118,13 @@ export function CapturePanel(props: Props) {
           v.videoHeight,
         ].join("|");
         setKey(profileKey);
-        setAreas(latest.current.config.calibration[profileKey] ?? initial);
-        setMode("Game captured");
-        setDetail("Check both regions before listening.");
+        setAreas(
+          (old) =>
+            latest.current.config.calibration[profileKey] ??
+            (firstSize ? initial : old),
+        );
+        if (firstSize) setMode("Game captured");
+        setDetail(firstSize ? "Ready to listen." : "Capture size updated.");
       };
       v.onresize = update;
       s.getVideoTracks()[0].onended = () => {
@@ -129,27 +143,60 @@ export function CapturePanel(props: Props) {
     }
   }
   async function observe(test: boolean) {
-    if (busy.current || !video.current) return;
+    if (
+      busy.current ||
+      !video.current ||
+      (!test && Date.now() < retryAt.current)
+    )
+      return;
     busy.current = true;
     const generation = epoch.current;
     try {
-      const [line, name] = await recognizer.current.read(
+      const observation = await recognizer.current.read(
         video.current,
-        areas,
+        props.config.manualRegions ? areas : initial,
         props.config.contrast,
+        props.config.manualRegions,
       );
       if (generation !== epoch.current) return;
-      const speaker =
-        name.confidence * 100 >= props.config.confidence
-          ? clean(name.text).slice(0, 80) || null
-          : null;
+      lastError.current = "";
+      retryAt.current = 0;
+      if (!observation) {
+        if (!test)
+          stabilizer.current.observe(
+            "",
+            null,
+            0,
+            Date.now(),
+            props.config.stableMs,
+            props.config.confidence / 100,
+          );
+        setDetail(
+          test
+            ? "No dialogue visible in the capture regions."
+            : "Waiting for dialogue · listening continues",
+        );
+        return;
+      }
+      const [line, ...names] = observation.reads;
+      const name = readNameplate(names, props.config.cast);
+      const speaker = name?.name ?? null;
       const info =
+        "Text OCR " +
         Math.round(line.confidence * 100) +
         "% · " +
-        (speaker ?? "Narrator") +
+        (observation.kind === "scene-card"
+          ? "Scene card · Narrator"
+          : name
+            ? speaker + " (name OCR " + Math.round(name.confidence * 100) + "%)"
+            : "No clear nameplate") +
         " · " +
         clean(line.text);
-      setDetail(info);
+      setDetail(
+        !test && line.text.trim() && line.confidence < 0.4
+          ? info + " · waiting for clearer text"
+          : info,
+      );
       if (test) {
         props.log(info);
         return;
@@ -161,6 +208,7 @@ export function CapturePanel(props: Props) {
         Date.now(),
         props.config.stableMs,
         props.config.confidence / 100,
+        observation.kind,
       );
       if (d) {
         props.log(info);
@@ -168,9 +216,15 @@ export function CapturePanel(props: Props) {
       }
     } catch (e) {
       if (generation === epoch.current) {
-        halt();
-        setMode("Paused");
-        fail(e);
+        if (test) {
+          fail(e);
+          return;
+        }
+        const message = String(e);
+        if (message !== lastError.current) props.log(message);
+        lastError.current = message;
+        retryAt.current = Date.now() + 1500;
+        setDetail("Retrying recognition automatically · " + message);
       }
     } finally {
       busy.current = false;
@@ -247,7 +301,8 @@ export function CapturePanel(props: Props) {
       <div
         className="preview"
         onPointerDown={(e) => {
-          if (!key || mode === "Listening") return;
+          if (!key || !props.config.manualRegions || mode === "Listening")
+            return;
           e.currentTarget.setPointerCapture(e.pointerId);
           drag.current = point(e);
         }}
@@ -255,6 +310,7 @@ export function CapturePanel(props: Props) {
       >
         <video ref={video} muted playsInline hidden={!key} />
         {key &&
+          props.config.manualRegions &&
           Object.entries(areas).map(([id, r]: [string, Rect]) => (
             <span
               className={"box " + id}
@@ -271,26 +327,51 @@ export function CapturePanel(props: Props) {
       {key && (
         <>
           <label>
-            Drag on preview to set{" "}
+            Dialogue detection
             <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value as keyof Regions)}
+              value={props.config.manualRegions ? "manual" : "automatic"}
+              onChange={(e) => {
+                const manualRegions = e.target.value === "manual";
+                api
+                  .preferences({ manualRegions })
+                  .then((c) => {
+                    epoch.current++;
+                    recognizer.current = new Recognition();
+                    stabilizer.current.reset();
+                    props.save(c);
+                  })
+                  .catch(fail);
+              }}
             >
-              <option value="dialogueBox">Dialogue (teal)</option>
-              <option value="speakerNameBox">Nameplate (gold)</option>
+              <option value="automatic">Automatic</option>
+              <option value="manual">Manual calibration</option>
             </select>
           </label>
+          {props.config.manualRegions && (
+            <label>
+              Drag on preview to set{" "}
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value as keyof Regions)}
+              >
+                <option value="dialogueBox">Dialogue (teal)</option>
+                <option value="speakerNameBox">Nameplate (gold)</option>
+              </select>
+            </label>
+          )}
           <div className="row">
-            <button
-              onClick={() =>
-                api
-                  .calibrate({ key, regions: areas })
-                  .then(props.save)
-                  .catch(fail)
-              }
-            >
-              Save profile
-            </button>
+            {props.config.manualRegions && (
+              <button
+                onClick={() =>
+                  api
+                    .calibrate({ key, regions: areas })
+                    .then(props.save)
+                    .catch(fail)
+                }
+              >
+                Save profile
+              </button>
+            )}
             <button
               onClick={() => observe(true)}
               disabled={mode === "Listening"}

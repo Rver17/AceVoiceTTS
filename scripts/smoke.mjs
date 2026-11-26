@@ -1,7 +1,7 @@
 // Real Windows desktop test. Only the purpose-built fixture window is selected.
 import { _electron as electron } from "playwright-core";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 const dir = await mkdtemp(path.join(tmpdir(), "acevoice-smoke-"));
@@ -105,9 +105,11 @@ try {
   const id = await option.getAttribute("value", { timeout: 15000 });
   await page.getByLabel("Window or display").selectOption(id);
   await page.getByRole("button", { name: "Select game window" }).click();
+  await page.getByLabel("Dialogue detection").selectOption("manual");
   await page
     .getByRole("button", { name: "Save profile" })
     .click({ timeout: 15000 });
+  await page.getByLabel("Dialogue detection").selectOption("automatic");
   const captureAt = performance.now();
   await page.getByRole("button", { name: "Start listening" }).click();
   await page.waitForFunction(
@@ -169,17 +171,11 @@ try {
   await page.getByText("Speaking · 0 queued").waitFor();
   await page.getByText("Idle · 0 queued").waitFor();
   console.log("Nameless episode confirmation played with Isabella.");
-  const data = await page.evaluate(() => window.ace.settings());
+  let data = await page.evaluate(() => window.ace.settings());
   assert.ok(
     data.cast.some((p) => p.key === "maya fey" && p.voiceId === "af_heart"),
   );
-  await page.getByRole("button", { name: "Pause", exact: true }).click();
-  await app.evaluate(({ BrowserWindow }) =>
-    BrowserWindow.getAllWindows()
-      .find((w) => w.getTitle() === "AceVoice fixture court")
-      .setContentSize(840, 500),
-  );
-  await page.getByText("Game captured", { exact: true }).waitFor();
+  // Keep the native capture running throughout a fade and a resolution change.
   await app.evaluate(async ({ BrowserWindow }) => {
     const w = BrowserWindow.getAllWindows().find(
       (w) => w.getTitle() === "AceVoice fixture court",
@@ -187,21 +183,112 @@ try {
     await w.webContents.executeJavaScript(
       "document.body.style.background='black';document.body.style.color='black'",
     );
+    w.setContentSize(840, 500);
   });
-  // The native stream can deliver the last pre-resize frame after the DOM changes.
-  const blackMessage = page.getByText(/Black capture regions/).first();
-  for (
-    let attempt = 0;
-    attempt < 8 && !(await blackMessage.isVisible());
-    attempt++
-  ) {
-    await page.getByRole("button", { name: "Test recognition" }).click();
-    await blackMessage.waitFor({ timeout: 1500 }).catch(() => {});
-  }
-  assert.ok(
-    await blackMessage.isVisible(),
-    "Black frame should give recovery instructions",
+  await page
+    .getByText("Waiting for dialogue · listening continues", { exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "Start listening" }).isDisabled(),
+    true,
   );
+  await app.evaluate(async ({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows().find(
+      (w) => w.getTitle() === "AceVoice fixture court",
+    );
+    await w.webContents.executeJavaScript(
+      "document.body.style.color='white';document.querySelector('h3').style.cssText='top:66%;left:12%;width:100px;background:#244a88;color:white;text-align:center;font:16px Georgia';document.querySelector('h3').textContent='Edgeworth';document.querySelector('p').textContent='We can resume the hearing.'",
+    );
+  });
+  await page
+    .getByText("Edgeworth · am_onyx", { exact: true })
+    .waitFor({ timeout: 30000 });
+  await page.getByText("Speaking · 0 queued").waitFor();
+  await page.getByText("Idle · 0 queued").waitFor();
+  console.log(
+    "Black transition and resize recovered automatically. Edgeworth spoke with his own voice.",
+  );
+  async function showLine(text) {
+    await app.evaluate(async ({ BrowserWindow }, s) => {
+      const w = BrowserWindow.getAllWindows().find(
+        (w) => w.getTitle() === "AceVoice fixture court",
+      );
+      await w.webContents.executeJavaScript(
+        "document.querySelector('h3').style.display='none';document.querySelector('p').textContent=" +
+          JSON.stringify(s),
+      );
+    }, text);
+    await page.waitForFunction(
+      (s) => document.querySelector("blockquote")?.textContent === s,
+      text,
+      { timeout: 30000 },
+    );
+  }
+  await showLine("Nobody saw me enter.");
+  const mysteryVoice = await page.locator(".monitor strong").innerText();
+  assert.match(mysteryVoice, /Mystery speaker/);
+  await showLine("Someone should leave this place.");
+  assert.equal(await page.locator(".monitor strong").innerText(), mysteryVoice);
+  let image = process.env.ACEVOICE_CARD_IMAGE
+    ? (await readFile(process.env.ACEVOICE_CARD_IMAGE)).toString("base64")
+    : "";
+  await app.evaluate(async ({ BrowserWindow }, png) => {
+    const w = BrowserWindow.getAllWindows().find(
+      (w) => w.getTitle() === "AceVoice fixture court",
+    );
+    await w.webContents.executeJavaScript(
+      png
+        ? "document.body.innerHTML='';document.body.style.cssText=" +
+            JSON.stringify(
+              "height:100vh;background:black url(data:image/png;base64," +
+                png +
+                ") center/100% 100% no-repeat",
+            )
+        : "document.body.innerHTML='<div style=\"position:absolute;top:60%;width:100%;text-align:center;color:lime;font:28px Georgia\">August 3, 9:47 AM<br>District Court<br>Defendant Lobby No. 2</div>'",
+    );
+  }, image);
+  await page.waitForFunction(
+    () =>
+      /August 3,?\s+9:47\s*AM\s+District Court\s+Defendant/i.test(
+        document.querySelector("blockquote")?.textContent ?? "",
+      ) &&
+      /Lobby No\.? 2/i.test(
+        document.querySelector("blockquote")?.textContent ?? "",
+      ),
+    null,
+    { timeout: 30000 },
+  );
+  await page.getByText("Narrator · bf_isabella", { exact: true }).waitFor();
+  await page.getByText("Speaking · 0 queued").waitFor();
+  console.log(
+    "Unnamed dialogue kept one mystery voice. The complete date/time/location card played through the narrator.",
+  );
+  if (process.env.ACEVOICE_PHOENIX_IMAGE) {
+    const png = (await readFile(process.env.ACEVOICE_PHOENIX_IMAGE)).toString(
+      "base64",
+    );
+    await app.evaluate(async ({ BrowserWindow }, image) => {
+      const fixture = BrowserWindow.getAllWindows().find(
+        (w) => w.getTitle() === "AceVoice fixture court",
+      );
+      fixture.setContentSize(1280, 732);
+      await fixture.webContents.executeJavaScript(
+        "document.body.style.backgroundImage=" +
+          JSON.stringify("url(data:image/png;base64," + image + ")"),
+      );
+    }, png);
+    await page
+      .getByText("(Boy am I nervous!)", { exact: true })
+      .first()
+      .waitFor({ timeout: 30000 });
+    await page.getByText("Phoenix · am_michael", { exact: true }).waitFor();
+    await page.getByText("Speaking · 0 queued").waitFor();
+    console.log(
+      "Captured Phoenix frame read and played with his assigned voice.",
+    );
+  }
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  await page.getByText("Paused", { exact: true }).waitFor();
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()
       .find((w) => w.getTitle() === "AceVoice fixture court")
@@ -211,6 +298,7 @@ try {
     .getByText("Capture lost", { exact: true })
     .waitFor({ timeout: 12000 });
   await page.getByRole("button", { name: "Stop", exact: true }).click();
+  data = await page.evaluate(() => window.ace.settings());
   console.log(
     "Windows native fixture capture → English OCR → Maya → Kokoro → Web Audio passed.",
   );

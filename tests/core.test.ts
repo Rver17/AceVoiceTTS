@@ -1,3 +1,5 @@
+import { MysteryCasting, isNarration } from "../core/scene";
+import { readNameplate } from "../core/nameplate";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -193,4 +195,67 @@ test("episode confirmation and missing nameplates use the editable narrator", ()
   const event = stabilize.observe(prompt, "Yes", 0.97, 500, 400, 0.75);
   assert.equal(event?.speakerRaw, null);
   assert.equal(allocate("Judge", [changed], pool).voiceId, "am_adam");
+});
+test("steady moderate-confidence dialogue plays once with a recognized low-confidence name", () => {
+  const speaker = readNameplate(
+    [
+      { text: "[ Maya ]", confidence: 0.43 },
+      { text: "blue", confidence: 0.68 },
+    ],
+    [],
+  );
+  assert.equal(speaker?.name, "Maya");
+  assert.equal(
+    readNameplate(
+      [
+        { text: "???", confidence: 0.92 },
+        { text: "XX", confidence: 0.45 },
+      ],
+      [],
+    ),
+    null,
+  );
+  const s = new Stabilizer();
+  const read = (at: number, c: number) =>
+    s.observe("The hearing can begin.", speaker!.name, c, at, 450, 0.75);
+  assert.equal(read(0, 0.42), null);
+  assert.equal(read(500, 0.61), null);
+  assert.equal(read(1000, 0.48)?.speakerKey, "maya fey");
+  assert.equal(read(1500, 0.67), null);
+  s.reset();
+  assert.equal(read(2000, 0.32), null);
+  assert.equal(read(4000, 0.32), null);
+});
+test("mystery casting persists within an exchange and changes after a transition", () => {
+  const s = new Stabilizer(),
+    pool = [
+      "am_adam",
+      "af_sarah",
+      "bf_isabella",
+      "ref_custom_0123456789abcdef01234567",
+    ];
+  s.observe("Nobody saw me.", null, 0.9, 0, 400, 0.75);
+  const line = s.observe("Nobody saw me.", null, 0.9, 500, 400, 0.75)!;
+  const narrator = allocate(null, [], pool),
+    m = new MysteryCasting();
+  const first = m.pick(line, pool, [], narrator);
+  assert.ok(["am_adam", "af_sarah"].includes(first.voiceId));
+  assert.equal(
+    m.pick({ ...line, text: "I can leave." }, pool, [], narrator).voiceId,
+    first.voiceId,
+  );
+  assert.notEqual(
+    m.pick({ ...line, sceneKey: "next" }, pool, [], narrator).voiceId,
+    first.voiceId,
+  );
+  assert.ok(
+    isNarration({
+      ...line,
+      text: "August 3, 9:47 AM District Court Defendant Lobby No. 2",
+    }),
+  );
+  assert.ok(
+    isNarration({ ...line, kind: "scene-card", text: "District Court" }),
+  );
+  assert.ok(!isNarration(line));
 });

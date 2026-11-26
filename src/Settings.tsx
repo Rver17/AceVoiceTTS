@@ -49,7 +49,7 @@ export function Settings({
           ["volume", "Output volume", 0, 1, 0.05],
           ["fps", "Frames per second", 2, 6, 1],
           ["stableMs", "Stable text (ms)", 250, 500, 25],
-          ["confidence", "Minimum OCR confidence (%)", 40, 95, 1],
+          ["confidence", "Confidence for faster narration (%)", 40, 95, 1],
           ["contrast", "OCR contrast", 1, 3, 0.1],
         ] as const
       ).map(([k, label, min, max, step]) => (

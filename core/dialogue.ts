@@ -1,6 +1,7 @@
 import { clean, type Profile, type Dialogue } from "./contracts";
 
 import { casting } from "./cast";
+import { episodePrompt } from "./scene";
 const keyOf = (name: string) => clean(name).toLowerCase();
 export function resolve(raw: string | null, cast: Profile[]) {
   const label = clean(raw ?? "");
@@ -84,9 +85,11 @@ export class Stabilizer {
   private since = 0;
   private spoken = "";
   private blanks = 0;
+  private sceneKey = crypto.randomUUID();
   reset() {
     this.candidate = this.spoken = "";
     this.blanks = 0;
+    this.sceneKey = crypto.randomUUID();
   }
   observe(
     raw: string,
@@ -95,6 +98,7 @@ export class Stabilizer {
     now: number,
     delay: number,
     threshold: number,
+    kind?: "scene-card",
   ): Dialogue | null {
     const text = clean(raw);
     if (!text) {
@@ -103,8 +107,16 @@ export class Stabilizer {
       return null;
     }
     this.blanks = 0;
+    // OCR often underrates small outlined game fonts. Give readable, lower
+    // confidence lines a longer stability window before sending them to speech.
+    const needsConfirmation = confidence < threshold;
+    const readable =
+      /[a-z]{2,}/i.test(text) &&
+      (text.match(/[\p{L}\p{N}\s.,!?'"’“”():…—-]/gu)?.length ?? 0) >=
+        text.length * 0.9;
     if (
-      confidence < threshold ||
+      confidence < 0.4 ||
+      (needsConfirmation && !readable) ||
       !/[a-z]{2}/i.test(text) ||
       /^(court record|options|save game|load game|present|profiles|evidence)$/i.test(
         text,
@@ -114,22 +126,25 @@ export class Stabilizer {
       return null;
     }
     // Episode prompts sometimes place a choice button inside the name crop.
-    if (
-      /^play\s+["“‘'][^"”’']{1,100}["”’']\s*\?$/i.test(text) ||
-      !resolve(speaker, [])
-    )
+    if (kind === "scene-card" || episodePrompt(text) || !resolve(speaker, []))
       speaker = null;
-    const id = JSON.stringify([keyOf(speaker ?? ""), text]);
+    const id = JSON.stringify([kind, keyOf(speaker ?? ""), text]);
     if (id !== this.candidate) {
       this.candidate = id;
       this.since = now;
       return null;
     }
-    if (now - this.since < delay || id === this.spoken) return null;
+    const settleMs =
+      needsConfirmation || kind === "scene-card"
+        ? Math.max(900, delay * 2)
+        : delay;
+    if (now - this.since < settleMs || id === this.spoken) return null;
     this.spoken = id;
     return {
       eventId: crypto.randomUUID(),
       source: "ocr",
+      sceneKey: this.sceneKey,
+      kind,
       observedAt: now,
       text,
       speakerRaw: speaker,
